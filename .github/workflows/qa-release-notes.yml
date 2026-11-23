@@ -11,7 +11,8 @@ on:
         default: C0CKZV49DHT # #qa-release-notes
     secrets:
       SLACK_QA_BOT_TOKEN:
-        required: true
+        # Not required, so callers stay green until an org admin adds it; without it the job only warns
+        required: false
 
 jobs:
   post:
