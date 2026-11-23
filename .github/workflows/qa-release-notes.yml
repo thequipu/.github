@@ -1,0 +1,41 @@
+# Reusable: posts a merged PR's "How to test" cases to Slack #qa-release-notes.
+# Each repo calls it from its own .github/workflows/qa-release-notes.yml (see workflow-templates/).
+name: QA release notes
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: Slack channel id to post to
+        type: string
+        default: C0CKZV49DHT # #qa-release-notes
+    secrets:
+      SLACK_QA_BOT_TOKEN:
+        required: true
+
+jobs:
+  post:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Fetch the posting script
+        uses: actions/checkout@v4
+        with:
+          repository: thequipu/.github
+          ref: main
+          path: .qa-release-notes
+          sparse-checkout: scripts/qa-release-notes
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Post to Slack
+        run: node .qa-release-notes/scripts/qa-release-notes/post.js
+        env:
+          SLACK_QA_BOT_TOKEN: ${{ secrets.SLACK_QA_BOT_TOKEN }}
+          SLACK_QA_CHANNEL: ${{ inputs.channel }}
+          GITHUB_TOKEN: ${{ github.token }}

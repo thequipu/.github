@@ -1,0 +1,6 @@
+{
+  "name": "QA release notes",
+  "description": "Posts merged PRs' How to test cases to Slack #qa-release-notes, where testers mark each case working / not working.",
+  "iconName": "octicon checklist",
+  "categories": ["Automation"]
+}

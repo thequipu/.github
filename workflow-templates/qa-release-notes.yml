@@ -1,0 +1,18 @@
+# Posts this repo's merged PRs (into develop or a release branch) to Slack #qa-release-notes for the testers.
+# The work is done by the shared workflow in thequipu/.github; this file only says when to run it.
+name: QA release notes
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [develop, 'release-*']
+
+jobs:
+  qa-release-notes:
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: thequipu/.github/.github/workflows/qa-release-notes.yml@main
+    secrets:
+      SLACK_QA_BOT_TOKEN: ${{ secrets.SLACK_QA_BOT_TOKEN }}
