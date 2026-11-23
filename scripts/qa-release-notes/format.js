@@ -1,8 +1,4 @@
-// Testers react on each case reply; the bot adds these three so marking is one click.
-const REACTIONS = ['white_check_mark', 'x', 'eyes'];
-const LEGEND = ':white_check_mark: working · :x: not working · :eyes: testing';
-
-function buildMessages(pr, notes) {
+function buildMessages(pr, notes, { trackerUrl } = {}) {
   const repoName = pr.repo.split('/').pop();
   const lines = [
     `:rocket: *<${pr.url}|${escape(`${repoName}#${pr.number} ${pr.title}`)}>* merged into \`${pr.base}\``,
@@ -17,12 +13,31 @@ function buildMessages(pr, notes) {
   if (notes.blockedBy) {
     lines.push('', ':warning: *Blocked by*', toSlack(notes.blockedBy));
   }
-  const count = notes.cases.length;
-  lines.push('', `*How to test*: ${count} case${count === 1 ? '' : 's'} in the thread :point_down:  React on each: ${LEGEND}`);
-  return {
-    parent: lines.join('\n'),
-    cases: notes.cases.map((testCase, i) => `*${i + 1}/${count}*  ${toSlack(testCase)}`),
-  };
+  lines.push('', '*How to test*');
+  notes.cases.forEach((testCase, i) => lines.push(`☐ ${i + 1}. ${toSlack(testCase)}`));
+  if (trackerUrl) {
+    lines.push('', `Mark each case in the <${trackerUrl}|QA Test Tracker>: tick Tested, set Result to Passed / Failed / Blocked.`);
+  }
+  return { parent: lines.join('\n') };
+}
+
+/** One QA Test Tracker row per case; plain markdown, since the tracker renders it itself. */
+function buildRows(pr, notes) {
+  const repoName = pr.repo.split('/').pop();
+  return notes.cases.map((testCase) => ({
+    ...splitCase(testCase),
+    feature: pr.title,
+    pr: `[${repoName}#${pr.number}](${pr.url})`,
+    branch: pr.base,
+  }));
+}
+
+// Cases are written "what to do → expected result"; the first arrow (→ or ->) separates the two
+function splitCase(testCase) {
+  const match = testCase.match(/^(.*?)\s*(?:→|->)\s*(.*)$/);
+  return match
+    ? { testCase: match[1].trim(), expected: match[2].trim() }
+    : { testCase: testCase.trim(), expected: '' };
 }
 
 // Slack's mrkdwn: & < > must be escaped, bold is *x*, links are <url|text>
@@ -36,4 +51,4 @@ function escape(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-module.exports = { buildMessages, toSlack, REACTIONS };
+module.exports = { buildMessages, buildRows, splitCase, toSlack };

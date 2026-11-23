@@ -1,11 +1,23 @@
 const fs = require('node:fs');
 const { parseQaNotes } = require('./parse');
-const { buildMessages, REACTIONS } = require('./format');
+const { buildMessages, buildRows } = require('./format');
 
 const POSTED_BRANCHES = /^(develop|release-.+)$/;
 const NO_CASES_COMMENT = 'No "How to test" cases found in this PR, so nothing was posted to #qa-release-notes. '
   + 'Add them under a `## How to test` heading as `- [ ] what to do → expected result` '
   + '(see the PR template) and post them by hand if testers need them.';
+
+// Column keys of the Slack list "QA Test Tracker" (F0CL5GU0PEW); read them with Slack's list schema if it is rebuilt
+const COLUMNS = {
+  testCase: 'Col0CL0DQAASH',
+  expected: 'Col0CM03V6KR6',
+  feature: 'Col0CL3PA84NA',
+  pr: 'Col0CKQB5KQ15',
+  branch: 'Col0CL7K1A54H',
+  tested: 'Col0CL5GU0CEN',
+  result: 'Col0CL9DK34DA',
+};
+const NOT_TESTED = 'not_tested';
 
 function shouldPost(event) {
   const pr = event.pull_request;
@@ -13,10 +25,11 @@ function shouldPost(event) {
 }
 
 /**
- * Posts a merged PR's tester notes to Slack: a summary message, then each case as a thread reply carrying the
- * reactions testers click to mark it. `slack(method, payload)` and `comment(text)` are injected for testing.
+ * Posts a merged PR's tester notes: one message in the channel with the What changed / Where / How to test
+ * checklist, and one row per case in the QA Test Tracker list, where testers tick Tested and set Passed / Failed.
+ * `slack(method, payload)` and `comment(text)` are injected for testing.
  */
-async function run({ event, slack, comment, channel }) {
+async function run({ event, slack, comment, channel, tracker }) {
   if (!shouldPost(event)) {
     return 'skipped';
   }
@@ -30,7 +43,7 @@ async function run({ event, slack, comment, channel }) {
     await comment(NO_CASES_COMMENT);
     return 'no-test-cases';
   }
-  const messages = buildMessages({
+  const details = {
     repo: event.repository.full_name,
     number: pr.number,
     title: pr.title,
@@ -38,17 +51,47 @@ async function run({ event, slack, comment, channel }) {
     author: pr.user.login,
     mergedBy: pr.merged_by ? pr.merged_by.login : 'unknown',
     base: pr.base.ref,
-  }, notes);
+  };
 
-  const parent = await slack('chat.postMessage', { channel, text: messages.parent, unfurl_links: false });
-  for (const text of messages.cases) {
-    const reply = await slack('chat.postMessage', { channel, thread_ts: parent.ts, text, unfurl_links: false });
-    for (const name of REACTIONS) {
-      await slack('reactions.add', { channel, timestamp: reply.ts, name });
-    }
+  const { parent } = buildMessages(details, notes, { trackerUrl: tracker && tracker.url });
+  await slack('chat.postMessage', { channel, text: parent, unfurl_links: false });
+
+  const count = `${notes.cases.length} test case${notes.cases.length === 1 ? '' : 's'}`;
+  if (!tracker) {
+    await comment(`Posted ${count} to #qa-release-notes for testing.`);
+    return 'posted';
   }
-  await comment(`Posted ${messages.cases.length} test case${messages.cases.length === 1 ? '' : 's'} to #qa-release-notes for testing.`);
+  try {
+    for (const row of buildRows(details, notes)) {
+      await slack('slackLists.items.create', { list_id: tracker.listId, initial_fields: trackerFields(row, details.url) });
+    }
+    await comment(`Posted ${count} to #qa-release-notes and the QA Test Tracker for testing.`);
+  } catch (error) {
+    // The channel post already carries the checklist, so a tracker failure is reported rather than failing the job
+    console.warn(`::warning::Could not add rows to the QA Test Tracker: ${error.message}`);
+    await comment(`Posted ${count} to #qa-release-notes, but could not add them to the QA Test Tracker: ${error.message}`);
+  }
   return 'posted';
+}
+
+function trackerFields(row, prUrl) {
+  return [
+    { column_id: COLUMNS.testCase, rich_text: richText(row.testCase) },
+    { column_id: COLUMNS.expected, rich_text: richText(row.expected) },
+    { column_id: COLUMNS.feature, rich_text: richText(row.feature) },
+    { column_id: COLUMNS.pr, rich_text: linkText(prUrl, row.pr.replace(/^\[(.*)\]\(.*\)$/, '$1')) },
+    { column_id: COLUMNS.branch, rich_text: richText(row.branch) },
+    { column_id: COLUMNS.tested, checkbox: false },
+    { column_id: COLUMNS.result, select: [NOT_TESTED] },
+  ];
+}
+
+function richText(text) {
+  return [{ type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text: text || '-' }] }] }];
+}
+
+function linkText(url, text) {
+  return [{ type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'link', url, text }] }] }];
 }
 
 function slackClient(token) {
@@ -59,7 +102,7 @@ function slackClient(token) {
       body: JSON.stringify(payload),
     });
     const result = await response.json();
-    if (!result.ok && result.error !== 'already_reacted') {
+    if (!result.ok) {
       throw new Error(`Slack ${method} failed: ${result.error}`);
     }
     return result;
@@ -83,11 +126,13 @@ function prCommenter(token, event) {
 
 async function main() {
   const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  const listId = process.env.SLACK_QA_LIST_ID;
   const outcome = await run({
     event,
     slack: process.env.SLACK_QA_BOT_TOKEN ? slackClient(process.env.SLACK_QA_BOT_TOKEN) : null,
     comment: prCommenter(process.env.GITHUB_TOKEN, event),
     channel: process.env.SLACK_QA_CHANNEL,
+    tracker: listId ? { listId, url: process.env.SLACK_QA_LIST_URL } : null,
   });
   if (outcome === 'no-slack-token') {
     console.log('::warning::SLACK_QA_BOT_TOKEN is not set, so nothing was posted to #qa-release-notes');
@@ -102,4 +147,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { run, shouldPost };
+module.exports = { run, shouldPost, COLUMNS, richText };
