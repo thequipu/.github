@@ -85,6 +85,15 @@ test('a merged PR without test cases posts nothing and says so on the PR', async
   assert.match(comments[0], /No "How to test" cases/);
 });
 
+test('skips quietly until the Slack token secret is set up', async () => {
+  const { comments, comment } = fakes();
+
+  const outcome = await run({ event: mergedEvent(), slack: null, comment, channel: 'C0QA' });
+
+  assert.equal(outcome, 'no-slack-token');
+  assert.equal(comments.length, 0);
+});
+
 test('does nothing for a PR closed without merging', async () => {
   const { calls, slack, comments, comment } = fakes();
 

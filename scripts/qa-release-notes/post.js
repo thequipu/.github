@@ -20,6 +20,10 @@ async function run({ event, slack, comment, channel }) {
   if (!shouldPost(event)) {
     return 'skipped';
   }
+  // Repos can adopt the workflow before an org admin adds the SLACK_QA_BOT_TOKEN secret; until then it is a no-op
+  if (!slack) {
+    return 'no-slack-token';
+  }
   const pr = event.pull_request;
   const notes = parseQaNotes(pr.body);
   if (notes.cases.length === 0) {
@@ -81,10 +85,13 @@ async function main() {
   const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
   const outcome = await run({
     event,
-    slack: slackClient(process.env.SLACK_QA_BOT_TOKEN),
+    slack: process.env.SLACK_QA_BOT_TOKEN ? slackClient(process.env.SLACK_QA_BOT_TOKEN) : null,
     comment: prCommenter(process.env.GITHUB_TOKEN, event),
     channel: process.env.SLACK_QA_CHANNEL,
   });
+  if (outcome === 'no-slack-token') {
+    console.log('::warning::SLACK_QA_BOT_TOKEN is not set, so nothing was posted to #qa-release-notes');
+  }
   console.log(`qa-release-notes: ${outcome}`);
 }
 
