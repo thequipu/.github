@@ -9,6 +9,14 @@ on:
         description: Slack channel id to post to
         type: string
         default: C0CKZV49DHT # #qa-release-notes
+      tracker_list_id:
+        description: Slack list the test cases are added to as rows (empty = post to the channel only)
+        type: string
+        default: F0CL5GU0PEW # QA Test Tracker
+      tracker_list_url:
+        description: Link to that list, shown in the channel message
+        type: string
+        default: https://quipuco.slack.com/lists/T05NK13D473/F0CL5GU0PEW
     secrets:
       SLACK_QA_BOT_TOKEN:
         # Not required, so callers stay green until an org admin adds it; without it the job only warns
@@ -39,4 +47,6 @@ jobs:
         env:
           SLACK_QA_BOT_TOKEN: ${{ secrets.SLACK_QA_BOT_TOKEN }}
           SLACK_QA_CHANNEL: ${{ inputs.channel }}
+          SLACK_QA_LIST_ID: ${{ inputs.tracker_list_id }}
+          SLACK_QA_LIST_URL: ${{ inputs.tracker_list_url }}
           GITHUB_TOKEN: ${{ github.token }}

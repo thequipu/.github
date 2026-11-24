@@ -8,9 +8,9 @@
 <!-- Screens, menu paths, endpoints, environments to test in. -->
 
 ## How to test
-<!-- One case per line: "- [ ] what to do → expected result". Each becomes a thread reply in #qa-release-notes
-     that testers mark ✅ working / ❌ not working / 👀 testing. Include failure cases and a regression check.
-     A PR with no cases here is not posted (and the bot says so on the PR). -->
+<!-- One case per line: "- [ ] what to do → expected result". On merge they are listed in #qa-release-notes and
+     each becomes a row in the Slack "QA Test Tracker", where testers tick Tested and set Passed / Failed / Blocked.
+     Include failure cases and a regression check. A PR with no cases here is not posted (the bot says so on the PR). -->
 - [ ] 
 
 ## Blocked by
